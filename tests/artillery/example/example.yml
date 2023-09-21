@@ -1,0 +1,18 @@
+config:
+  target: "TODO: Add url"
+  processor: "./example.js"
+  phases:
+    - duration: 300
+      arrivalRate: 10
+      rampTo: 500
+  includeFiles:
+    - example.yml
+    - example.js
+    - test.yml
+
+scenarios:
+  - name: "Get Example"
+    flow:
+      - get:
+          url: "/example"
+      - log: "Get Example"

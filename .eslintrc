@@ -1,0 +1,3 @@
+{
+  "extends": ["@novemberfiveco/eslint-config-serverless"]
+}

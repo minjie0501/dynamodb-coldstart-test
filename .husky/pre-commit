@@ -1,0 +1,6 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+npx tsx .husky/scripts/checkLambdaNameLength.ts
+npm run ci:tsc
+npm run ci:eslint

@@ -1,0 +1,124 @@
+service: dynamo-coldstart
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+  - serverless-plugin-log-retention
+  - serverless-prune-plugin
+  - serverless-plugin-split-stacks
+
+custom:
+  stage: ${opt:stage, 'stag'}
+  tf: ${file(build/terraform-outputs.json)}
+  prune:
+    automatic: true
+    includeLayers: true
+    number: 3
+  esbuild: ${file(./serverless-resolver.cjs)}
+  serverless-offline:
+    noPrependStageInUrl: true
+    noAuth: true
+    functionCleanupIdleTimeSeconds: 1 # removes local cache for continuous testing
+    useChildProcesses: true
+  logRetentionInDays: 30
+  splitStacks:
+    perFunction: false
+    perType: true
+    perGroupFunction: false
+  cors_config: &cors_config
+    cors:
+      origin: "*"
+      headers: "*"
+      allowCredentials: true
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  architecture: arm64
+  region: eu-west-1
+  timeout: 10
+  stage: ${self:custom.stage}
+  stackTags: ${self:custom.tf.custom_tags}
+  tags: ${self:custom.tf.custom_tags}
+  tracing:
+    apiGateway: false
+    lambda: false
+  environment:
+    ENV: ${self:provider.stage}
+    # Enable node source map support on error
+    NODE_OPTIONS: "--enable-source-maps"
+    LUMIGO_TAG: ${self:custom.stage}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "codepipeline:PutJobSuccessResult"
+        - "codepipeline:PutJobFailureResult"
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - "rds:CreateDBClusterSnapshot"
+      Resource: "*"
+    - Effect: "Allow"
+      Action: "s3:*"
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - "lambda:InvokeFunction"
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource: "*"
+
+package:
+  individually: true
+  excludeDevDependencies: true
+
+functions:
+  postUser:
+    handler: src/api/users/postUser.handler
+    events:
+      - http:
+          path: "api/users"
+          method: POST
+          <<: *cors_config
+  getUser:
+    handler: src/api/users/getUser.handler
+    events:
+      - http:
+          path: "api/users/{userId}"
+          method: GET
+          <<: *cors_config
+
+resources:
+  Resources:
+    GatewayResponse:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+    GatewayResponse5xx:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'*'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+    # CognitoApiGatewayAuthorizer:
+    #   Type: AWS::ApiGateway::Authorizer
+    #   Properties:
+    #     IdentitySource: method.request.header.Authorization
+    #     Name: cognito_authorizer
+    #     RestApiId:
+    #       Ref: "ApiGatewayRestApi"
+    #     Type: COGNITO_USER_POOLS
+    #     ProviderARNs:
+    #       - ${self:custom.tf.cognito_user_pool_arn}
